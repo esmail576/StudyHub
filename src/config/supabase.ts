@@ -9,8 +9,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables. Please check your configuration.');
 }
 
-// Create Supabase client with validated URL and key
-export const supabase = createClient(
-  supabaseUrl || 'https://default-project.supabase.co',
-  supabaseAnonKey || 'default-anon-key'
-) 
+// Create a singleton instance
+let supabaseInstance: ReturnType<typeof createClient> | null = null;
+
+// Create or get the Supabase client instance
+export const supabase = (() => {
+  if (!supabaseInstance) {
+    supabaseInstance = createClient(
+      supabaseUrl || 'https://default-project.supabase.co',
+      supabaseAnonKey || 'default-anon-key'
+    );
+  }
+  return supabaseInstance;
+})(); 
