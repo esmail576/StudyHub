@@ -16,7 +16,7 @@ export default defineConfig({
     extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json']
   },
   envPrefix: ['VITE_', 'TELEGRAM_'], // Allow both VITE_ and TELEGRAM_ prefixed variables
-  base: '/StudyHub/',
+  base: './',
   build: {
     sourcemap: true,
     rollupOptions: {
