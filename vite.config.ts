@@ -25,6 +25,9 @@ export default defineConfig({
           vendor: ['react', 'react-dom', 'react-router-dom'],
         },
         format: 'es',
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]'
       },
     },
     target: 'esnext',
