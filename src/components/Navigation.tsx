@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Search, BookOpen, Users, GraduationCap, ShoppingBag, AlertCircle, LogOut } from 'lucide-react';
+import { Search, BookOpen, Users, GraduationCap, ShoppingBag, AlertCircle, LogOut, Menu, X, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import WelcomePage from './Hello';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface NavigationProps {
   activeTab: string;
@@ -14,8 +18,10 @@ interface NavigationProps {
 
 const Navigation = ({ activeTab, setActiveTab }: NavigationProps) => {
   const { user, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [userProfile, setUserProfile] = useState<{ full_name: string } | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -41,7 +47,6 @@ const Navigation = ({ activeTab, setActiveTab }: NavigationProps) => {
     { id: 'courses', label: 'Courses', icon: Search },
     { id: 'reviews', label: 'Reviews', icon: BookOpen },
     { id: 'notes', label: 'Notes', icon: BookOpen },
-    { id: 'tutors', label: 'Tutors', icon: GraduationCap },
     { id: 'marketplace', label: 'Marketplace', icon: ShoppingBag },
     { id: 'lost-items', label: 'Lost Items', icon: AlertCircle },
   ];
@@ -127,18 +132,90 @@ const Navigation = ({ activeTab, setActiveTab }: NavigationProps) => {
               </Button>
             )}
             
-            <div className="md:hidden">
-              <select
-                value={activeTab}
-                onChange={(e) => setActiveTab(e.target.value)}
-                className="bg-background border border-border rounded-lg px-3 py-2 text-sm"
+            {/* Desktop Theme Toggle */}
+            <div className="hidden md:flex items-center">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                className="relative h-9 w-9 rounded-full"
               >
-                {tabs.map((tab) => (
-                  <option key={tab.id} value={tab.id}>
-                    {tab.label}
-                  </option>
-                ))}
-              </select>
+                <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <span className="sr-only">Toggle theme</span>
+              </Button>
+            </div>
+            
+            <div className="md:hidden">
+              <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+                  <SheetHeader className="text-left">
+                    <SheetTitle>Menu</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col gap-2 py-6">
+                    {tabs.map((tab) => {
+                      const Icon = tab.icon;
+                      return (
+                        <motion.button
+                          key={tab.id}
+                          onClick={() => {
+                            setActiveTab(tab.id);
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-300 ${
+                            activeTab === tab.id
+                              ? 'bg-primary text-primary-foreground shadow-md'
+                              : 'bg-card hover:bg-accent'
+                          }`}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <Icon className="h-5 w-5" />
+                          <span className="text-sm font-medium">{tab.label}</span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                  
+                  <div className="mt-auto space-y-4">
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-card">
+                      <div className="flex items-center space-x-3">
+                        {theme === 'dark' ? (
+                          <Moon className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Sun className="h-5 w-5 text-primary" />
+                        )}
+                        <Label htmlFor="theme-toggle" className="text-sm font-medium">
+                          Dark Mode
+                        </Label>
+                      </div>
+                      <Switch
+                        id="theme-toggle"
+                        checked={theme === 'dark'}
+                        onCheckedChange={toggleTheme}
+                      />
+                    </div>
+                    
+                    {user && (
+                      <div className="pt-4 border-t">
+                        <Button 
+                          variant="outline" 
+                          className="w-full flex items-center justify-center space-x-2"
+                          onClick={handleSignOut}
+                        >
+                          <LogOut className="h-4 w-4" />
+                          <span>Sign Out</span>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </div>

@@ -1,4 +1,3 @@
-
 -- Create reviews table
 CREATE TABLE public.reviews (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -72,6 +71,9 @@ CREATE POLICY "Users can create reviews" ON public.reviews
 CREATE POLICY "Users can update their own reviews" ON public.reviews
   FOR UPDATE TO authenticated USING (auth.uid() = user_id);
 
+CREATE POLICY "Users can delete their own reviews" ON public.reviews
+  FOR DELETE TO authenticated USING (auth.uid() = user_id);
+
 -- RLS Policies for notes
 CREATE POLICY "Anyone can view notes" ON public.notes
   FOR SELECT TO authenticated USING (true);
@@ -144,4 +146,6 @@ SELECT
   'Library 3rd Floor',
   'student@university.edu',
   50.00
+WHERE EXISTS (SELECT 1 FROM auth.users);
+
 WHERE EXISTS (SELECT 1 FROM auth.users);

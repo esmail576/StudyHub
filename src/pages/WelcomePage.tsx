@@ -1,23 +1,85 @@
-import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, BookOpen, Users, GraduationCap, Sparkles, Github, Twitter, Linkedin, Mail } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { motion, AnimatePresence, useInView } from 'framer-motion';
+import { ArrowRight, BookOpen, Users, GraduationCap, Sparkles, Github, Twitter, Linkedin, Mail, LogOut, Star, Rocket, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { supabase } from '@/integrations/supabase/client';
+
+const CountUp = ({ end, duration = 2 }) => {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true });
+
+  useEffect(() => {
+    if (isInView) {
+      let startTime: number | null = null;
+      const animate = (currentTime: number) => {
+        if (!startTime) startTime = currentTime;
+        const progress = Math.min((currentTime - startTime) / (duration * 1000), 1);
+        setCount(Math.floor(progress * end));
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+      requestAnimationFrame(animate);
+    }
+  }, [isInView, end, duration]);
+
+  return <span ref={ref}>{count.toLocaleString()}</span>;
+};
 
 const WelcomePage = () => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [isVisible, setIsVisible] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ full_name: string } | null>(null);
 
   useEffect(() => {
     setIsVisible(true);
   }, []);
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching user profile:', error);
+        } else {
+          setUserProfile(data);
+        }
+      }
+    };
+
+    fetchUserProfile();
+  }, [user]);
 
   const handleGetStarted = () => {
     setIsTransitioning(true);
     setTimeout(() => {
       navigate('/');
     }, 3000);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/auth');
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   const containerVariants = {
@@ -46,18 +108,28 @@ const WelcomePage = () => {
     {
       icon: <BookOpen className="h-6 w-6" />,
       title: "Study Resources",
-      description: "Access comprehensive study materials and notes"
+      description: "Access comprehensive study materials and notes",
+      color: "from-blue-500 to-blue-600"
     },
     {
       icon: <Users className="h-6 w-6" />,
       title: "Community",
-      description: "Connect with fellow students and tutors"
+      description: "Connect with fellow students and tutors",
+      color: "from-purple-500 to-purple-600"
     },
     {
       icon: <GraduationCap className="h-6 w-6" />,
       title: "Academic Support",
-      description: "Get help from experienced tutors and mentors"
+      description: "Get help from experienced tutors and mentors",
+      color: "from-green-500 to-green-600"
     }
+  ];
+
+  const stats = [
+    { number: 1000, label: "Active Students", icon: <Users className="h-6 w-6" />, color: "from-blue-500 to-blue-600" },
+    { number: 500, label: "Study Resources", icon: <BookOpen className="h-6 w-6" />, color: "from-purple-500 to-purple-600" },
+    { number: 200, label: "Expert Tutors", icon: <GraduationCap className="h-6 w-6" />, color: "from-green-500 to-green-600" },
+    { number: 50, label: "Courses", icon: <Target className="h-6 w-6" />, color: "from-orange-500 to-orange-600" }
   ];
 
   return (
@@ -69,17 +141,17 @@ const WelcomePage = () => {
             initial={{ 
               opacity: 0,
               scale: 0.8,
-              backgroundColor: 'hsl(var(--primary))'
+              backgroundColor: '#0ea5e9'
             }}
             animate={{ 
               opacity: 1,
               scale: 1,
-              backgroundColor: 'hsl(var(--primary))'
+              backgroundColor: '#0ea5e9'
             }}
             exit={{ 
               opacity: 0,
               scale: 1.2,
-              backgroundColor: 'hsl(var(--primary))'
+              backgroundColor: '#0ea5e9'
             }}
             transition={{ 
               duration: 2,
@@ -163,8 +235,7 @@ const WelcomePage = () => {
                   transition={{ delay: 1.2 }}
                   className="text-white/80 text-2xl"
                 >
-                    By Student for Students...
-
+                  By Student for Students...
                 </motion.p>
               </motion.div>
 
@@ -204,12 +275,38 @@ const WelcomePage = () => {
             <span className="text-xl font-bold text-foreground">StudyHub</span>
           </div>
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" onClick={() => navigate('/auth')}>
-              Sign In
-            </Button>
-            <Button onClick={handleGetStarted}>
-              Get Started
-            </Button>
+            {user ? (
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground">
+                      {userProfile?.full_name ? getInitials(userProfile.full_name) : 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-foreground hidden sm:inline">
+                    {userProfile?.full_name || 'User'}
+                  </span>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleSignOut}
+                  className="flex items-center space-x-1"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => navigate('/auth')}>
+                  Sign In
+                </Button>
+                <Button onClick={handleGetStarted}>
+                  Get Started
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -258,7 +355,7 @@ const WelcomePage = () => {
             <Sparkles className="h-12 w-12 text-primary animate-pulse" />
           </motion.div>
           <h1 className="text-5xl md:text-6xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60 mb-4">
-            Welcome to StudyHub
+            {user ? `Welcome ${userProfile?.full_name || 'User'}` : 'Welcome Student'}
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Your all-in-one platform for academic success. Connect, learn, and grow with fellow students.
@@ -286,11 +383,15 @@ const WelcomePage = () => {
           {features.map((feature, index) => (
             <motion.div
               key={index}
-              className="p-6 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/50 transition-colors"
-              whileHover={{ y: -5 }}
+              className="p-6 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/50 transition-all duration-300"
+              whileHover={{ 
+                y: -5,
+                scale: 1.02,
+                boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)"
+              }}
               variants={itemVariants}
             >
-              <div className="text-primary mb-4">
+              <div className={`p-3 rounded-lg bg-gradient-to-r ${feature.color} text-white mb-4 inline-block`}>
                 {feature.icon}
               </div>
               <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
@@ -301,32 +402,107 @@ const WelcomePage = () => {
 
         {/* Animated Stats */}
         <motion.div 
-          className="mt-16 text-center"
+          className="mt-16"
           variants={itemVariants}
         >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto">
-            {[
-              { number: "1000+", label: "Active Students" },
-              { number: "500+", label: "Study Resources" },
-              { number: "200+", label: "Expert Tutors" },
-              { number: "50+", label: "Courses" }
-            ].map((stat, index) => (
+            {stats.map((stat, index) => (
               <motion.div
                 key={index}
-                className="p-4"
-                whileHover={{ scale: 1.05 }}
+                className="p-6 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/50 transition-all duration-300"
+                whileHover={{ 
+                  y: -5,
+                  scale: 1.02,
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)"
+                }}
               >
+                <div className={`p-3 rounded-lg bg-gradient-to-r ${stat.color} text-white mb-4 inline-block`}>
+                  {stat.icon}
+                </div>
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="text-3xl font-bold text-primary mb-2"
+                  className="text-3xl font-bold mb-2"
                 >
-                  {stat.number}
+                  <CountUp end={stat.number} />
+                  <span className="text-primary">+</span>
                 </motion.div>
                 <div className="text-muted-foreground">{stat.label}</div>
               </motion.div>
             ))}
+          </div>
+        </motion.div>
+
+        {/* Additional Features Section */}
+        <motion.div 
+          className="mt-16 text-center"
+          variants={itemVariants}
+        >
+          <h2 className="text-3xl font-bold mb-8">Why Choose StudyHub?</h2>
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {[
+              {
+                icon: <Star className="h-6 w-6" />,
+                title: "Quality Content",
+                description: "Curated study materials and resources by top students",
+                color: "from-yellow-500 to-yellow-600"
+              },
+              {
+                icon: <Rocket className="h-6 w-6" />,
+                title: "Fast Learning",
+                description: "Accelerate your learning with our efficient tools",
+                color: "from-red-500 to-red-600"
+              },
+              {
+                icon: <Target className="h-6 w-6" />,
+                title: "Goal Oriented",
+                description: "Track your progress and achieve your academic goals",
+                color: "from-indigo-500 to-indigo-600"
+              }
+            ].map((feature, index) => (
+              <motion.div
+                key={index}
+                className="p-6 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/50 transition-all duration-300"
+                whileHover={{ 
+                  y: -5,
+                  scale: 1.02,
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)"
+                }}
+              >
+                <div className={`p-3 rounded-lg bg-gradient-to-r ${feature.color} text-white mb-4 inline-block`}>
+                  {feature.icon}
+                </div>
+                <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
+                <p className="text-muted-foreground">{feature.description}</p>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Call to Action */}
+        <motion.div 
+          className="mt-16 text-center"
+          variants={itemVariants}
+        >
+          <div className="p-8 rounded-2xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20">
+            <h2 className="text-3xl font-bold mb-4">Ready to Start Your Journey?</h2>
+            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
+              Join thousands of students who are already using StudyHub to achieve their academic goals.
+            </p>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Button 
+                size="lg" 
+                className="group"
+                onClick={handleGetStarted}
+              >
+                Get Started Now
+                <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </motion.div>
           </div>
         </motion.div>
       </motion.div>

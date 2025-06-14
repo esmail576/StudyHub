@@ -1,16 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navigation from '../components/Navigation';
 import CoursesTab from '../components/CoursesTab';
 import ReviewsTab from '../components/ReviewsTab';
 import NotesTab from '../components/NotesTab';
-import TutorsTab from '../components/TutorsTab';
 import MarketplaceTab from '../components/MarketplaceTab';
 import LostItemsTab from '../components/LostItemsTab';
 import ProtectedRoute from '../components/ProtectedRoute';
 import Footer from '../components/Footer';
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState('courses');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Get the initial tab from URL hash or default to 'courses'
+    const hash = window.location.hash.slice(1); // Remove the # symbol
+    return hash || 'courses';
+  });
+
+  // Update URL hash when activeTab changes
+  useEffect(() => {
+    window.location.hash = activeTab;
+  }, [activeTab]);
+
+  // Listen for hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash) {
+        setActiveTab(hash);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   const renderActiveTab = () => {
     switch (activeTab) {
@@ -30,12 +51,6 @@ const Index = () => {
         return (
           <ProtectedRoute>
             <NotesTab />
-          </ProtectedRoute>
-        );
-      case 'tutors':
-        return (
-          <ProtectedRoute>
-            <TutorsTab />
           </ProtectedRoute>
         );
       case 'marketplace':

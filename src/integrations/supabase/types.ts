@@ -82,13 +82,11 @@ export interface Database {
       lost_items: {
         Row: {
           category: string
-          contact_email: string
+          whatsapp_number: string
           created_at: string | null
           description: string
           id: string
-          images: string[] | null
           location: string
-          reward: number | null
           status: string | null
           title: string
           type: string
@@ -96,13 +94,11 @@ export interface Database {
         }
         Insert: {
           category: string
-          contact_email: string
+          whatsapp_number: string
           created_at?: string | null
           description: string
           id?: string
-          images?: string[] | null
           location: string
-          reward?: number | null
           status?: string | null
           title: string
           type: string
@@ -110,13 +106,11 @@ export interface Database {
         }
         Update: {
           category?: string
-          contact_email?: string
+          whatsapp_number?: string
           created_at?: string | null
           description?: string
           id?: string
-          images?: string[] | null
           location?: string
-          reward?: number | null
           status?: string | null
           title?: string
           type?: string
@@ -202,42 +196,67 @@ export interface Database {
       }
       notes: {
         Row: {
-          category: string | null
-          created_at: string | null
-          description: string | null
-          id: string
-          linktree_url: string
-          major: string
-          title: string
-          uploader_name: string | null
-          user_id: string
-          hearts_count: number | null
+          id: string;
+          title: string;
+          description: string | null;
+          subject: string;
+          course_code: string | null;
+          file_type: string;
+          telegram_message_id: string;
+          file_id: string;
+          created_at: string | null;
+          user_id: string;
+          major: string;
+          uploader_name: string;
+          hearts_count: number;
+          linktree_url: string | null;
+          preview_image: string | null;
+          link_type: string | null;
         }
         Insert: {
-          category?: string | null
-          created_at?: string | null
-          description?: string | null
-          id?: string
-          linktree_url: string
-          major: string
-          title: string
-          uploader_name?: string | null
-          user_id: string
-          hearts_count?: number | null
+          id?: string;
+          title: string;
+          description?: string | null;
+          subject: string;
+          course_code?: string | null;
+          file_type: string;
+          telegram_message_id: string;
+          file_id: string;
+          created_at?: string | null;
+          user_id: string;
+          major: string;
+          uploader_name: string;
+          hearts_count?: number;
+          linktree_url?: string | null;
+          preview_image?: string | null;
+          link_type?: string | null;
         }
         Update: {
-          category?: string | null
-          created_at?: string | null
-          description?: string | null
-          id?: string
-          linktree_url?: string
-          major?: string
-          title?: string
-          uploader_name?: string | null
-          user_id?: string
-          hearts_count?: number | null
+          id?: string;
+          title?: string;
+          description?: string | null;
+          subject?: string;
+          course_code?: string | null;
+          file_type?: string;
+          telegram_message_id?: string;
+          file_id?: string;
+          created_at?: string | null;
+          user_id?: string;
+          major?: string;
+          uploader_name?: string;
+          hearts_count?: number;
+          linktree_url?: string | null;
+          preview_image?: string | null;
+          link_type?: string | null;
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notes_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       profiles: {
         Row: {
@@ -444,6 +463,31 @@ export type Enums<
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends { schema: keyof Database }
   ? Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof Database },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof Database
+  }
+    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
+  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
+
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never

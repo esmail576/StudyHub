@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, ExternalLink, User, Calendar, Plus, Search, Image as ImageIcon, FileText, Cloud, Link as LinkIcon, Heart } from 'lucide-react';
+import { Link, ExternalLink, User, Calendar, Plus, Search, Image as ImageIcon, FileText, Cloud, Link as LinkIcon, Heart, Book, Download, GraduationCap, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,40 +11,51 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import Loading from '@/components/ui/loading';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/components/ui/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { createClient } from '@supabase/supabase-js';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { NoteUploadDialog } from './NoteUploadDialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+import { FolderStructure } from './FolderStructure';
+import { TelegramTest } from './TelegramTest';
+
+const supabaseClient = createClient(
+  import.meta.env.VITE_PUBLIC_SUPABASE_URL!,
+  import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface Note {
   id: string;
   title: string;
-  major: string;
-  linktree_url: string;
-  created_at: string;
+  description: string | null;
+  subject: string;
+  course_code: string | null;
+  file_type: string;
+  telegram_message_id: string;
+  telegram_file_id: string;
+  created_at: string | null;
   user_id: string;
-  uploader_name?: string;
-  preview_image?: string;
-  link_type?: 'linktree' | 'drive' | 'dropbox' | 'other';
+  major: string;
+  uploader_name: string;
   hearts_count: number;
+  linktree_url: string | null;
+  preview_image: string | null;
+  link_type: string | null;
   is_hearted?: boolean;
+  original_filename?: string;
 }
 
-interface DatabaseNote {
-  id: string;
-  title: string;
-  major: string;
-  linktree_url: string;
-  created_at: string;
-  user_id: string;
-  uploader_name: string | null;
-  hearts_count: number;
-}
-
-const getLinkType = (url: string): 'linktree' | 'drive' | 'dropbox' | 'other' => {
+const getLinkType = (url: string): string => {
   if (url.includes('linktr.ee/')) return 'linktree';
   if (url.includes('drive.google.com/')) return 'drive';
   if (url.includes('dropbox.com/')) return 'dropbox';
   return 'other';
 };
 
-const getLinkIcon = (type: 'linktree' | 'drive' | 'dropbox' | 'other') => {
+const getLinkIcon = (type: string) => {
   switch (type) {
     case 'linktree':
       return <LinkIcon className="h-16 w-16 text-purple-400" />;
@@ -57,35 +68,36 @@ const getLinkIcon = (type: 'linktree' | 'drive' | 'dropbox' | 'other') => {
   }
 };
 
-const getLinkColor = (type: 'linktree' | 'drive' | 'dropbox' | 'other') => {
+const getLinkColor = (type: string) => {
   switch (type) {
     case 'linktree':
-      return 'from-purple-100 to-pink-100';
+      return 'from-purple-900/20 to-pink-900/20';
     case 'drive':
-      return 'from-blue-50 to-indigo-50';
+      return 'from-blue-900/20 to-indigo-900/20';
     case 'dropbox':
-      return 'from-blue-50 to-cyan-50';
+      return 'from-blue-900/20 to-cyan-900/20';
     default:
-      return 'from-gray-50 to-slate-50';
+      return 'from-gray-900/20 to-slate-900/20';
   }
 };
 
-const getLinkTextColor = (type: 'linktree' | 'drive' | 'dropbox' | 'other') => {
+const getLinkTextColor = (type: string) => {
   switch (type) {
     case 'linktree':
-      return 'text-purple-700';
+      return 'text-purple-300';
     case 'drive':
-      return 'text-blue-700';
+      return 'text-blue-300';
     case 'dropbox':
-      return 'text-blue-700';
+      return 'text-blue-300';
     default:
-      return 'text-gray-700';
+      return 'text-gray-300';
   }
 };
 
 const NotesTab = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [notes, setNotes] = useState<Note[]>([]);
+  const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -97,80 +109,182 @@ const NotesTab = () => {
   });
   const [hearts, setHearts] = useState<Set<string>>(new Set());
   const [animatingHearts, setAnimatingHearts] = useState<Set<string>>(new Set());
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState('all');
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+
+  const cardVariants = {
+    hidden: { 
+      opacity: 0, 
+      y: 20,
+      scale: 0.95
+    },
+    visible: (index: number) => ({
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        delay: index * 0.05,
+        duration: 0.3,
+        ease: [0.4, 0, 0.2, 1]
+      }
+    }),
+    exit: {
+      opacity: 0,
+      y: -20,
+      scale: 0.95,
+      transition: {
+        duration: 0.2,
+        ease: [0.4, 0, 0.2, 1]
+      }
+    },
+    hover: {
+      scale: 1.02,
+      transition: {
+        type: "spring",
+        stiffness: 400,
+        damping: 10
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredNotes(notes);
+    } else {
+      const searchLower = searchTerm.toLowerCase().replace(/\s+/g, '');
+      const filtered = notes.filter(note => {
+        const noteTitle = note.title.toLowerCase().replace(/\s+/g, '');
+        const noteMajor = note.major?.toLowerCase().replace(/\s+/g, '') ?? '';
+        const noteUploader = note.uploader_name?.toLowerCase().replace(/\s+/g, '') ?? '';
+
+        return noteTitle.includes(searchLower) ||
+               noteMajor.includes(searchLower) ||
+               noteUploader.includes(searchLower);
+      });
+      setFilteredNotes(filtered);
+    }
+  }, [searchTerm, notes]);
 
   const initializeData = async () => {
     setLoading(true);
     try {
+      console.log('Starting to fetch data...');
       // First fetch user hearts if logged in
       if (user) {
+        console.log('User is logged in, fetching hearts...');
         const { data: heartsData, error: heartsError } = await supabase
           .from('note_hearts')
           .select('note_id')
           .eq('user_id', user.id);
 
-        if (heartsError) throw heartsError;
+        if (heartsError) {
+          console.error('Error fetching hearts:', heartsError);
+          throw heartsError;
+        }
         
+        console.log('Hearts data:', heartsData);
         const heartedNotes = new Set(heartsData.map(h => h.note_id));
         setHearts(heartedNotes);
 
         // Then fetch notes
+        console.log('Fetching notes...');
         const { data: notesData, error: notesError } = await supabase
           .from('notes')
           .select('*')
-          .order('hearts_count', { ascending: false })
           .order('created_at', { ascending: false });
 
-        if (notesError) throw notesError;
+        if (notesError) {
+          console.error('Error fetching notes:', notesError);
+          throw notesError;
+        }
+
+        console.log('Notes data:', notesData);
+        console.log('First note details:', notesData?.[0]);
+        console.log('Second note details:', notesData?.[1]);
 
         // Transform notes with hearted state
-        const transformedData = (notesData as unknown as DatabaseNote[]).map(note => ({
-          id: note.id,
-          title: note.title,
-          major: note.major,
-          linktree_url: note.linktree_url,
-          created_at: note.created_at,
-          user_id: note.user_id,
-          uploader_name: note.uploader_name || undefined,
-          preview_image: note.linktree_url.includes('linktr.ee/') 
-            ? `https://api.microlink.io/?url=${encodeURIComponent(note.linktree_url)}&meta=true&embed=image.url`
-            : undefined,
-          link_type: getLinkType(note.linktree_url),
-          hearts_count: note.hearts_count,
-          is_hearted: heartedNotes.has(note.id)
-        }));
+        const transformedData = (notesData as unknown as Note[]).map(note => {
+          const transformed = {
+            id: note.id,
+            title: note.title,
+            description: note.description || '',
+            subject: note.subject || '',
+            course_code: note.course_code || '',
+            file_type: note.file_type || '',
+            telegram_message_id: note.telegram_message_id || '',
+            created_at: note.created_at,
+            user_id: note.user_id,
+            major: note.major || '',
+            uploader_name: note.uploader_name || '',
+            linktree_url: note.linktree_url || '',
+            preview_image: note.linktree_url?.includes('linktr.ee/') 
+              ? `https://api.microlink.io/?url=${encodeURIComponent(note.linktree_url)}&meta=true&embed=image.url`
+              : '',
+            link_type: getLinkType(note.linktree_url || ''),
+            hearts_count: note.hearts_count || 0,
+            is_hearted: heartedNotes.has(note.id),
+            telegram_file_id: note.telegram_file_id,
+            original_filename: note.original_filename
+          };
+          console.log('Transformed note:', transformed);
+          return transformed;
+        });
 
+        console.log('Transformed data:', transformedData);
         setNotes(transformedData);
+        setFilteredNotes(transformedData);
       } else {
         // If not logged in, just fetch notes without hearted state
+        console.log('User is not logged in, fetching notes only...');
         const { data: notesData, error: notesError } = await supabase
           .from('notes')
           .select('*')
-          .order('hearts_count', { ascending: false })
           .order('created_at', { ascending: false });
 
-        if (notesError) throw notesError;
+        if (notesError) {
+          console.error('Error fetching notes:', notesError);
+          throw notesError;
+        }
 
-        const transformedData = (notesData as unknown as DatabaseNote[]).map(note => ({
+        console.log('Notes data:', notesData);
+
+        const transformedData = (notesData as unknown as Note[]).map(note => ({
           id: note.id,
           title: note.title,
-          major: note.major,
-          linktree_url: note.linktree_url,
+          description: note.description || '',
+          subject: note.subject || '',
+          course_code: note.course_code || '',
+          file_type: note.file_type || '',
+          telegram_message_id: note.telegram_message_id || '',
           created_at: note.created_at,
           user_id: note.user_id,
-          uploader_name: note.uploader_name || undefined,
-          preview_image: note.linktree_url.includes('linktr.ee/') 
+          major: note.major || '',
+          uploader_name: note.uploader_name || '',
+          linktree_url: note.linktree_url || '',
+          preview_image: note.linktree_url?.includes('linktr.ee/') 
             ? `https://api.microlink.io/?url=${encodeURIComponent(note.linktree_url)}&meta=true&embed=image.url`
-            : undefined,
-          link_type: getLinkType(note.linktree_url),
-          hearts_count: note.hearts_count,
-          is_hearted: false
+            : '',
+          link_type: getLinkType(note.linktree_url || ''),
+          hearts_count: note.hearts_count || 0,
+          is_hearted: false,
+          telegram_file_id: note.telegram_file_id,
+          original_filename: note.original_filename
         }));
 
+        console.log('Transformed data:', transformedData);
         setNotes(transformedData);
+        setFilteredNotes(transformedData);
       }
     } catch (error) {
       console.error('Error initializing data:', error);
-      toast.error('Failed to load notes');
+      toast({
+        title: 'Error',
+        description: 'Failed to load notes',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -182,56 +296,54 @@ const NotesTab = () => {
 
   const handleAddNote = async () => {
     if (!user) {
-      toast.error('Please sign in to add notes');
-      return;
-    }
-
-    if (!newNote.title.trim() || !newNote.major.trim() || !newNote.linktree_url.trim()) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    const linkType = getLinkType(newNote.linktree_url);
-    if (linkType === 'other') {
-      toast.error('Please enter a valid Linktree, Google Drive, or Dropbox URL');
+      toast({
+        title: 'Error',
+        description: 'Please sign in to add notes',
+        variant: 'destructive',
+      });
       return;
     }
 
     setAdding(true);
     try {
-      const { data, error } = await supabase
-        .from('notes')
-        .insert({
-          user_id: user.id,
-          title: newNote.title.trim(),
-          major: `${newNote.major.trim()} Student`,
-          linktree_url: newNote.linktree_url.trim(),
-          uploader_name: user.email || 'Anonymous'
-        })
-        .select()
-        .single();
+      const { error } = await supabase.from('notes').insert({
+        title: newNote.title,
+        description: '',
+        subject: 'Other',
+        course_code: '',
+        file_type: 'application/pdf',
+        telegram_message_id: '',
+        telegram_file_id: '',
+        user_id: user.id,
+        major: newNote.major,
+        uploader_name: user.user_metadata?.full_name || 'Anonymous',
+        hearts_count: 0,
+        linktree_url: newNote.linktree_url,
+        preview_image: null,
+        link_type: getLinkType(newNote.linktree_url)
+      });
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
-      if (!data) {
-        throw new Error('No data returned after insert');
-      }
+      toast({
+        title: 'Success',
+        description: 'Note added successfully',
+      });
 
-      toast.success('Resource added successfully!');
-      setShowAddDialog(false);
       setNewNote({
         title: '',
         major: '',
         linktree_url: ''
       });
-      // Refresh the data
+      setShowAddDialog(false);
       initializeData();
     } catch (error: any) {
       console.error('Error adding note:', error);
-      toast.error(error.message || 'Failed to add resource. Please try again.');
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to add note',
+        variant: 'destructive',
+      });
     } finally {
       setAdding(false);
     }
@@ -241,7 +353,11 @@ const NotesTab = () => {
     e.stopPropagation(); // Prevent card click when clicking heart
     
     if (!user) {
-      toast.error('Please sign in to heart notes');
+      toast({
+        title: 'Error',
+        description: 'Please sign in to heart notes',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -291,14 +407,214 @@ const NotesTab = () => {
       }
     } catch (error) {
       console.error('Error toggling heart:', error);
-      toast.error('Failed to update heart status');
+      toast({
+        title: 'Error',
+        description: 'Failed to update heart status',
+        variant: 'destructive',
+      });
     }
   };
 
-  const filteredNotes = notes.filter(note => 
-    note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    note.major.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleUpload = async (formData: FormData) => {
+    try {
+      const file = formData.get('file') as File;
+      if (!file) {
+        throw new Error('No file selected');
+      }
+
+      console.log('Uploading file with metadata:', {
+        name: file.name,
+        type: file.type,
+        size: file.size
+      });
+
+      const response = await fetch('http://localhost:3001/api/upload-to-telegram', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to upload note');
+      }
+
+      const data = await response.json();
+      console.log('Upload response:', data);
+      
+      // Save to Supabase with complete file metadata
+      const { error: supabaseError } = await supabase.from('notes').insert({
+        title: formData.get('title') as string,
+        description: formData.get('description') as string,
+        subject: formData.get('subject') as string,
+        course_code: formData.get('course_code') as string,
+        major: formData.get('major') as string,
+        file_type: file.type,
+        original_filename: file.name,
+        telegram_message_id: data.telegram_message_id,
+        telegram_file_id: data.file_id,
+        user_id: formData.get('user_id') as string,
+        uploader_name: formData.get('uploader_name') as string,
+        hearts_count: 0,
+        linktree_url: null,
+        preview_image: null,
+        link_type: null
+      });
+
+      if (supabaseError) throw supabaseError;
+
+      toast({
+        title: 'Success',
+        description: 'Note uploaded successfully',
+      });
+
+      initializeData();
+      setShowUploadDialog(false);
+    } catch (error: any) {
+      console.error('Error uploading note:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to upload note',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const fetchNotes = async () => {
+    try {
+      let query = supabaseClient
+        .from('notes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      // Add folder filter if a folder is selected
+      if (selectedFolderId) {
+        query = query.eq('folder_id', selectedFolderId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+      setNotes(data || []);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch notes',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotes();
+  }, [selectedFolderId]);
+
+  const filterNotes = () => {
+    let filtered = [...notes];
+    
+    if (searchTerm) {
+      filtered = filtered.filter(note =>
+        note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        note.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        note.course_code?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (selectedSubject && selectedSubject !== 'all') {
+      filtered = filtered.filter(note => note.subject === selectedSubject);
+    }
+
+    if (activeTab === 'my-notes' && user) {
+      filtered = filtered.filter(note => note.user_id === user.id);
+    }
+
+    setFilteredNotes(filtered);
+  };
+
+  const handleDownload = async (note: Note) => {
+    if (!note.telegram_file_id) {
+      toast({
+        title: "Error",
+        description: "This note doesn't have an associated file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Show loading toast
+      toast({
+        title: "Downloading...",
+        description: "Please wait while we prepare your file.",
+      });
+
+      console.log('Downloading file with metadata:', {
+        fileId: note.telegram_file_id,
+        originalFilename: note.original_filename,
+        fileType: note.file_type
+      });
+
+      // Fetch the file from our server
+      const response = await fetch(`http://localhost:3001/api/download-note/${note.telegram_file_id}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to download file');
+      }
+
+      // Get the filename from the Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = note.original_filename || note.title;
+      
+      // If we have a Content-Disposition header, try to extract the filename
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1]);
+        } else {
+          const simpleMatch = contentDisposition.match(/filename="([^"]+)"/);
+          if (simpleMatch) {
+            filename = simpleMatch[1];
+          }
+        }
+      }
+
+      console.log('Download response headers:', {
+        contentDisposition,
+        contentType: response.headers.get('Content-Type'),
+        filename
+      });
+
+      // Create a blob from the response
+      const blob = await response.blob();
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      // Show success toast
+      toast({
+        title: "Success",
+        description: "File downloaded successfully!",
+      });
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to download file. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -324,190 +640,196 @@ const NotesTab = () => {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Study Resources</h1>
-        <p className="text-muted-foreground">Share and discover study materials through various platforms</p>
-      </div>
-
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input
-            type="text"
-            placeholder="Search resources..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-          <DialogTrigger asChild>
-            <Button className="hover:scale-105 transition-transform">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Resource
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Study Resource</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="title">Title *</Label>
-                <Input
-                  id="title"
-                  value={newNote.title}
-                  onChange={(e) => setNewNote(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="e.g., Data Structures Notes"
-                />
-              </div>
-              <div>
-                <Label htmlFor="major">Major *</Label>
-                <Input
-                  id="major"
-                  value={newNote.major}
-                  onChange={(e) => setNewNote(prev => ({ ...prev, major: e.target.value }))}
-                  placeholder="e.g., Computer Science"
-                />
-              </div>
-              <div>
-                <Label htmlFor="linktree">Resource URL *</Label>
-                <Input
-                  id="linktree"
-                  value={newNote.linktree_url}
-                  onChange={(e) => setNewNote(prev => ({ ...prev, linktree_url: e.target.value }))}
-                  placeholder="e.g., https://linktr.ee/username or https://drive.google.com/..."
-                />
-                <p className="text-sm text-muted-foreground mt-1">
-                  Supported platforms: Linktree, Google Drive, Dropbox
-                </p>
-              </div>
-              <Button 
-                onClick={handleAddNote} 
-                className="w-full"
-                disabled={adding}
-              >
-                {adding ? 'Adding...' : 'Add Resource'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredNotes.map((note) => (
-          <Card key={note.id} className="group hover:shadow-xl transition-all duration-300 overflow-hidden border-2 hover:border-purple-500/50 relative">
-            <div 
-              className={`relative h-64 w-full overflow-hidden bg-gradient-to-br ${getLinkColor(note.link_type || 'other')} cursor-pointer`}
-              onClick={() => window.open(note.linktree_url, '_blank')}
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="flex flex-col gap-6">
+        {/* Header Section */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Study Notes</h1>
+            <p className="text-muted-foreground mt-1">Access and share study materials with your peers</p>
+          </div>
+          <div className="flex gap-2">
+            <TelegramTest />
+            <Button 
+              onClick={() => setShowUploadDialog(true)}
+              className="w-full sm:w-auto"
             >
-              {note.preview_image ? (
-                <img
-                  src={note.preview_image}
-                  alt={note.title}
-                  className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = 'https://placehold.co/600x400/e2e8f0/64748b?text=Resource';
-                  }}
+              <Plus className="mr-2 h-4 w-4" />
+              Upload Notes
+            </Button>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex gap-6">
+          {/* Folder Structure */}
+          <FolderStructure
+            onFolderSelect={setSelectedFolderId}
+            selectedFolderId={selectedFolderId}
+          />
+
+          {/* Notes Content */}
+          <div className="flex-1">
+            {/* Search and Filter Section */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search notes..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9"
                 />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
-                  <div className="relative">
-                    {getLinkIcon(note.link_type || 'other')}
-                    <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center">
-                      <Link className="h-4 w-4 text-gray-500" />
-                    </div>
-                  </div>
-                  <div className="mt-6 space-y-2">
-                    <h3 className={`text-xl font-bold ${getLinkTextColor(note.link_type || 'other')} line-clamp-2`}>
-                      {note.title}
-                    </h3>
-                    <p className="text-sm font-medium text-gray-500">
-                      {note.link_type === 'drive' ? 'Google Drive Resource' :
-                       note.link_type === 'dropbox' ? 'Dropbox Resource' :
-                       'Study Resource'}
-                    </p>
-                  </div>
-                </div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-                <div className="flex flex-col space-y-1">
-                  <h3 className="text-lg font-semibold text-white line-clamp-1">
-                    {note.title}
-                  </h3>
-                  <div className="flex items-center justify-between">
-                    <Badge variant="secondary" className="w-fit bg-white/90 backdrop-blur-sm text-gray-700 hover:bg-white transition-colors duration-300">
-                      {note.major}
-                    </Badge>
-                    <button
-                      onClick={(e) => handleHeart(note.id, e)}
-                      className={`group/heart flex items-center space-x-2 px-3 py-1.5 rounded-full transition-all duration-300 ${
-                        note.is_hearted 
-                          ? 'bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-500/30' 
-                          : 'bg-white/90 text-gray-700 hover:bg-white hover:shadow-md'
-                      }`}
-                    >
-                      <div className="relative">
-                        <Heart 
-                          className={`h-5 w-5 transition-transform duration-300 ${
-                            note.is_hearted 
-                              ? 'fill-current scale-110' 
-                              : 'group-hover/heart:scale-110'
-                          }`} 
-                        />
-                        {note.is_hearted && (
-                          <div className="absolute inset-0 animate-ping-slow">
-                            <Heart className="h-5 w-5 text-red-500 fill-current opacity-75" />
-                          </div>
-                        )}
-                      </div>
-                      <span className={`text-sm font-medium transition-colors duration-300 ${
-                        note.is_hearted ? 'text-white' : 'text-gray-700'
-                      }`}>
-                        {note.hearts_count}
-                      </span>
-                    </button>
-                  </div>
-                </div>
               </div>
-              {animatingHearts.has(note.id) && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="animate-heart-burst">
-                    <Heart className="h-24 w-24 text-red-500 fill-current drop-shadow-lg" />
-                  </div>
-                  <div className="absolute inset-0 animate-heart-particles">
-                    {[...Array(24)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="absolute w-3 h-3 bg-red-500 rounded-full"
-                        style={{
-                          transform: `rotate(${i * 15}deg) translateY(-40px)`,
-                          animation: `heart-particle-${i} 1s ease-out forwards`,
-                          filter: 'drop-shadow(0 0 4px rgba(239, 68, 68, 0.8))'
-                        }}
-                      />
+              <Select value={selectedSubject} onValueChange={setSelectedSubject}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                  <Filter className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Filter by subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Subjects</SelectItem>
+                  <SelectItem value="Mathematics">Mathematics</SelectItem>
+                  <SelectItem value="Physics">Physics</SelectItem>
+                  <SelectItem value="Computer Science">Computer Science</SelectItem>
+                  <SelectItem value="Chemistry">Chemistry</SelectItem>
+                  <SelectItem value="Biology">Biology</SelectItem>
+                  <SelectItem value="Engineering">Engineering</SelectItem>
+                  <SelectItem value="Business">Business</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Notes Grid */}
+            <ScrollArea className="h-[calc(100vh-300px)]">
+              {loading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[...Array(6)].map((_, i) => (
+                    <Card key={i} className="overflow-hidden">
+                      <CardHeader className="p-6">
+                        <Skeleton className="h-6 w-3/4" />
+                        <Skeleton className="h-4 w-1/2 mt-2" />
+                      </CardHeader>
+                      <CardContent className="p-6">
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-2/3 mt-2" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : filteredNotes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold">No notes found</h3>
+                  <p className="text-muted-foreground mt-1">
+                    {searchTerm ? 'Try adjusting your search' : 'Be the first to share your notes!'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <AnimatePresence>
+                    {filteredNotes.map((note, index) => (
+                      <motion.div
+                        key={note.id}
+                        variants={cardVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        whileHover="hover"
+                        custom={index}
+                      >
+                        <Card className={cn(
+                          "overflow-hidden transition-all duration-200",
+                          "hover:shadow-lg hover:shadow-primary/10",
+                          "bg-gradient-to-br from-background to-muted/50",
+                          "border border-border/50",
+                          "backdrop-blur-sm",
+                          note.link_type && `bg-gradient-to-br ${getLinkColor(note.link_type)}`
+                        )}>
+                          <CardHeader className="p-6">
+                            <div className="flex items-start justify-between">
+                              <div className="space-y-1">
+                                <CardTitle className="line-clamp-2 text-lg font-semibold text-foreground">
+                                  {note.title}
+                                </CardTitle>
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                  <User className="h-4 w-4" />
+                                  <span>{note.uploader_name}</span>
+                                </div>
+                              </div>
+                              {note.link_type && (
+                                <div className="flex-shrink-0">
+                                  {getLinkIcon(note.link_type)}
+                                </div>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent className="p-6 pt-0">
+                            <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                              {note.description}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mb-4">
+                              <Badge variant="secondary" className="bg-primary/20 text-primary hover:bg-primary/30">
+                                {note.subject}
+                              </Badge>
+                              {note.major && (
+                                <Badge variant="outline" className="border-primary/20 text-primary">
+                                  {note.major}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between pt-4 border-t border-border/50">
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn(
+                                    "gap-1 hover:bg-red-500/10",
+                                    note.is_hearted && "text-red-400 hover:text-red-300"
+                                  )}
+                                  onClick={(e) => handleHeart(note.id, e)}
+                                >
+                                  <Heart className={cn(
+                                    "h-4 w-4",
+                                    note.is_hearted && "fill-current"
+                                  )} />
+                                  <span>{note.hearts_count}</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="gap-1 hover:bg-primary/10 text-primary hover:text-primary/90"
+                                  onClick={() => handleDownload(note)}
+                                >
+                                  <Download className="h-4 w-4" />
+                                  <span>Download</span>
+                                </Button>
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {new Date(note.created_at || '').toLocaleDateString()}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
                     ))}
-                  </div>
-                  <div className="absolute inset-0 animate-heart-glow">
-                    <div className="absolute inset-0 bg-red-500/20 rounded-full blur-3xl" />
-                    <div className="absolute inset-0 bg-red-500/10 rounded-full blur-2xl" />
-                  </div>
+                  </AnimatePresence>
                 </div>
               )}
-            </div>
-          </Card>
-        ))}
+            </ScrollArea>
+          </div>
+        </div>
       </div>
 
-      {filteredNotes.length === 0 && (
-        <div className="text-center py-12 bg-muted/50 rounded-lg">
-          <Link className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">No resources found matching your criteria.</p>
-        </div>
-      )}
+      <NoteUploadDialog
+        open={showUploadDialog}
+        onOpenChange={setShowUploadDialog}
+        onSuccess={() => {
+          initializeData();
+          setShowUploadDialog(false);
+        }}
+        selectedFolderId={selectedFolderId}
+      />
     </div>
   );
 };
@@ -604,3 +926,4 @@ if (typeof document !== 'undefined') {
 }
 
 export default NotesTab;
+
