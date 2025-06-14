@@ -20,6 +20,8 @@ jobs:
     env:
       VITE_PUBLIC_SUPABASE_URL: ${{ secrets.VITE_PUBLIC_SUPABASE_URL }}
       VITE_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.VITE_PUBLIC_SUPABASE_ANON_KEY }}
+      VITE_PUBLIC_TELEGRAM_BOT_TOKEN: ${{ secrets.VITE_PUBLIC_TELEGRAM_BOT_TOKEN }}
+      VITE_PUBLIC_TELEGRAM_CHANNEL_ID: ${{ secrets.VITE_PUBLIC_TELEGRAM_CHANNEL_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,6 +32,12 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm install
+      - name: Create env file
+        run: |
+          echo "VITE_PUBLIC_SUPABASE_URL=${{ secrets.VITE_PUBLIC_SUPABASE_URL }}" >> .env
+          echo "VITE_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.VITE_PUBLIC_SUPABASE_ANON_KEY }}" >> .env
+          echo "VITE_PUBLIC_TELEGRAM_BOT_TOKEN=${{ secrets.VITE_PUBLIC_TELEGRAM_BOT_TOKEN }}" >> .env
+          echo "VITE_PUBLIC_TELEGRAM_CHANNEL_ID=${{ secrets.VITE_PUBLIC_TELEGRAM_CHANNEL_ID }}" >> .env
       - name: Build
         run: npm run build
       - name: Create .nojekyll file
