@@ -5,15 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { Folder, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const supabase = createClient(
-  import.meta.env.VITE_PUBLIC_SUPABASE_URL,
-  import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY
-);
+import { supabase } from '@/config/supabase';
 
 interface FolderItem {
   id: string;
